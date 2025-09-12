@@ -5,32 +5,65 @@
   <title>Log Processing Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f9f9f9;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-    .chart-container {
-      width: 600px;
-      margin: 20px auto;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    .controls {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    select {
-      padding: 8px 12px;
-      font-size: 14px;
-      border-radius: 6px;
-    }
+	body {
+	  font-family: "Segoe UI", Arial, sans-serif;
+	  margin: 0;
+	  padding: 0;
+	  background: #121212;
+	  color: #e0e0e0;
+	}
+	
+	h1 {
+	  text-align: center;
+	  margin: 20px;
+	  color: #00adb5;
+	}
+	
+	.chart-container {
+	  max-width: 800px;
+	  margin: 20px auto;
+	  background: #1e1e1e;
+	  padding: 20px;
+	  border-radius: 12px;
+	  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+	}
+	
+	.controls {
+	  text-align: center;
+	  margin: 20px;
+	}
+	
+	select, input {
+	  padding: 8px 12px;
+	  font-size: 14px;
+	  border-radius: 6px;
+	  border: none;
+	  margin: 0 5px;
+	  background: #222;
+	  color: #e0e0e0;
+	}
+	
+	table {
+	  border-collapse: collapse;
+	  width: 100%;
+	  margin-top: 10px;
+	  font-size: 14px;
+	}
+	
+	th {
+	  background: #333;
+	  color: #00adb5;
+	  padding: 8px;
+	}
+	
+	tr:nth-child(even) {
+	  background: #1c1c1c;
+	}
+	
+	td {
+	  padding: 6px;
+	}
+
   </style>
 </head>
 <body>
@@ -56,84 +89,153 @@
   <div class="chart-container">
     <canvas id="endpointChart"></canvas>
   </div>
+  
+  <div class="chart-container">
+    <h3>📜 Recent Logs</h3>
+    
+    <div class="controls">
+      <input type="text" id="searchBox" placeholder="Search logs..." onkeyup="applyFilters()">
+      <select id="levelFilter" onchange="applyFilters()">
+        <option value="">All Levels</option>
+        <option value="INFO">INFO</option>
+        <option value="ERROR">ERROR</option>
+        <option value="WARN">WARN</option>
+      </select>
+    </div>
+  
+    <table id="logTable" border="1" cellspacing="0" cellpadding="8">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Level</th>
+          <th>Endpoint</th>
+          <th>Latency (ms)</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-  <script>
-    let errorChart, latencyChart, endpointChart;
-
-	async function fetchData() {
-	  const minutes = document.getElementById("timeRange").value;
+	<script>
+	  let errorChart, latencyChart, endpointChart;
 	
-	  const errors = await fetch(`/api/stats/errors/recent?minutes=${minutes}`).then(res => res.json());
-	  const latency = await fetch(`/api/stats/latency/recent?minutes=${minutes}`).then(res => res.json());
-	  const endpoints = await fetch(`/api/stats/endpoints/recent?minutes=${minutes}`).then(res => res.json());
-	  const levels = await fetch(`/api/stats/levels`).then(res => res.json());
+	  async function fetchData() {
+	    const minutes = document.getElementById("timeRange").value;
 	
-	  renderCharts(errors, latency, endpoints, levels);
-	}
-
-	function renderCharts(errors, latency, endpoints, levels) {
-	  if (errorChart) errorChart.destroy();
-	  if (latencyChart) latencyChart.destroy();
-	  if (endpointChart) endpointChart.destroy();
+	    const errors = await fetch(`/api/stats/errors/recent?minutes=${minutes}`).then(res => res.json());
+	    const latency = await fetch(`/api/stats/latency/recent?minutes=${minutes}`).then(res => res.json());
+	    const endpoints = await fetch(`/api/stats/endpoints/recent?minutes=${minutes}`).then(res => res.json());
+	    const levels = await fetch(`/api/stats/levels`).then(res => res.json());
+	    const logs = await fetch(`/api/stats/logs/recent?minutes=${minutes}`).then(res => res.json());
 	
-	  // Error Pie Chart
-	  errorChart = new Chart(document.getElementById("errorChart"), {
-	    type: "pie",
-	    data: {
-	      labels: ["Errors", "Success"],
-	      datasets: [{
-	        data: [errors.errorCount, errors.totalRequests - errors.errorCount],
-	        backgroundColor: ["#e74c3c", "#2ecc71"]
-	      }]
-	    },
-	    options: {
-	      plugins: {
-	        title: {
-	          display: true,
-	          text: `Error Rate (last ${errors.minutes} min) = ${errors.errorRate.toFixed(2)}%`
+	    renderCharts(errors, latency, endpoints);
+	    renderLogs(logs);
+	  }
+	
+	  function renderCharts(errors, latency, endpoints) {
+	    // Destroy old charts before re-rendering
+	    if (errorChart) errorChart.destroy();
+	    if (latencyChart) latencyChart.destroy();
+	    if (endpointChart) endpointChart.destroy();
+	
+	    // Error Pie Chart
+	    errorChart = new Chart(document.getElementById("errorChart"), {
+	      type: "pie",
+	      data: {
+	        labels: ["Errors", "Success"],
+	        datasets: [{
+	          data: [errors.errorCount, errors.totalRequests - errors.errorCount],
+	          backgroundColor: ["#e74c3c", "#2ecc71"]
+	        }]
+	      },
+	      options: {
+	        plugins: {
+	          title: {
+	            display: true,
+	            text: `Error Rate (last ${errors.minutes} min) = ${errors.errorRate.toFixed(2)}%`
+	          }
 	        }
 	      }
-	    }
-	  });
-
-	   // Latency Chart
-	  latencyChart = new Chart(document.getElementById("latencyChart"), {
-	    type: "bar",
-	    data: {
-	      labels: [`Last ${latency.minutes} min`],
-	      datasets: [{
-	        label: "Avg Latency (ms)",
-	        data: [latency.averageLatency],
-	        backgroundColor: ["#3498db"]
-	      }]
-	    }
-	  });
-
-	  // Endpoint Usage Chart
-	  endpointChart = new Chart(document.getElementById("endpointChart"), {
-	    type: "bar",
-	    data: {
-	      labels: Object.keys(endpoints),
-	      datasets: [{
-	        label: "API Calls",
-	        data: Object.values(endpoints),
-	        backgroundColor: "#9b59b6"
-	      }]
-	    },
-	    options: {
-	      indexAxis: "y",
-	      plugins: {
-	        title: {
-	          display: true,
-	          text: `Top Endpoints (last ${errors.minutes} min)`
+	    });
+	
+	    // Latency Chart
+	    latencyChart = new Chart(document.getElementById("latencyChart"), {
+	      type: "bar",
+	      data: {
+	        labels: [`Last ${latency.minutes} min`],
+	        datasets: [{
+	          label: "Avg Latency (ms)",
+	          data: [latency.averageLatency],
+	          backgroundColor: ["#3498db"]
+	        }]
+	      }
+	    });
+	
+	    // Endpoint Usage Chart
+	    endpointChart = new Chart(document.getElementById("endpointChart"), {
+	      type: "bar",
+	      data: {
+	        labels: Object.keys(endpoints),
+	        datasets: [{
+	          label: "API Calls",
+	          data: Object.values(endpoints),
+	          backgroundColor: "#9b59b6"
+	        }]
+	      },
+	      options: {
+	        indexAxis: "y",
+	        plugins: {
+	          title: {
+	            display: true,
+	            text: `Top Endpoints (last ${errors.minutes} min)`
+	          }
 	        }
 	      }
-	    }
-	  });
-    }
+	    });
+	  }
+	
+	  let allLogs = []; // store all logs before filtering
+	  
+	  function renderLogs(logs) {
+	    allLogs = logs; // keep copy
+	    applyFilters(); // filter + render
+	  }
+	  
+	  function applyFilters() {
+	    const searchTerm = document.getElementById("searchBox").value.toLowerCase();
+	    const levelFilter = document.getElementById("levelFilter").value;
+	  
+	    const tbody = document.querySelector("#logTable tbody");
+	    tbody.innerHTML = "";
+	  
+	    allLogs
+	      .filter(log => {
+	        const matchesSearch =
+	          log.message.toLowerCase().includes(searchTerm) ||
+	          log.endpoint.toLowerCase().includes(searchTerm);
+	        const matchesLevel = !levelFilter || log.level === levelFilter;
+	        return matchesSearch && matchesLevel;
+	      })
+	      .slice(-20) // last 20 logs
+	      .reverse()  // newest first
+	      .forEach(log => {
+	        const row = `
+	          <tr>
+	            <td>${log.timestamp}</td>
+	            <td style="color:${log.level === "ERROR" ? "red" : "lightgreen"}">${log.level}</td>
+	            <td>${log.endpoint}</td>
+	            <td>${log.latency}</td>
+	            <td>${log.message}</td>
+	          </tr>
+	        `;
+	        tbody.innerHTML += row;
+	      });
+	  }
 
-    fetchData();
-    setInterval(fetchData, 5000); // auto-refresh every 5s
-  </script>
+	
+	  fetchData();
+	  setInterval(fetchData, 5000); // auto-refresh every 5s
+	</script>
 </body>
 </html>
