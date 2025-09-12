@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Log Processing Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .chart-container {
+      width: 600px;
+      margin: 20px auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    select {
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Real-time Log Dashboard</h1>
+
+  <div class="controls">
+    <label for="timeRange">Time Range: </label>
+    <select id="timeRange" onchange="fetchData()">
+      <option value="1">Last 1 Minute</option>
+      <option value="5">Last 5 Minutes</option>
+      <option value="10">Last 10 Minutes</option>
+    </select>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="errorChart"></canvas>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="latencyChart"></canvas>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="endpointChart"></canvas>
+  </div>
+
+  <script>
+    let errorChart, latencyChart, endpointChart;
+
+	async function fetchData() {
+	  const minutes = document.getElementById("timeRange").value;
+	
+	  const errors = await fetch(`/api/stats/errors/recent?minutes=${minutes}`).then(res => res.json());
+	  const latency = await fetch(`/api/stats/latency/recent?minutes=${minutes}`).then(res => res.json());
+	  const endpoints = await fetch(`/api/stats/endpoints/recent?minutes=${minutes}`).then(res => res.json());
+	  const levels = await fetch(`/api/stats/levels`).then(res => res.json());
+	
+	  renderCharts(errors, latency, endpoints, levels);
+	}
+
+	function renderCharts(errors, latency, endpoints, levels) {
+	  if (errorChart) errorChart.destroy();
+	  if (latencyChart) latencyChart.destroy();
+	  if (endpointChart) endpointChart.destroy();
+	
+	  // Error Pie Chart
+	  errorChart = new Chart(document.getElementById("errorChart"), {
+	    type: "pie",
+	    data: {
+	      labels: ["Errors", "Success"],
+	      datasets: [{
+	        data: [errors.errorCount, errors.totalRequests - errors.errorCount],
+	        backgroundColor: ["#e74c3c", "#2ecc71"]
+	      }]
+	    },
+	    options: {
+	      plugins: {
+	        title: {
+	          display: true,
+	          text: `Error Rate (last ${errors.minutes} min) = ${errors.errorRate.toFixed(2)}%`
+	        }
+	      }
+	    }
+	  });
+
+	   // Latency Chart
+	  latencyChart = new Chart(document.getElementById("latencyChart"), {
+	    type: "bar",
+	    data: {
+	      labels: [`Last ${latency.minutes} min`],
+	      datasets: [{
+	        label: "Avg Latency (ms)",
+	        data: [latency.averageLatency],
+	        backgroundColor: ["#3498db"]
+	      }]
+	    }
+	  });
+
+	  // Endpoint Usage Chart
+	  endpointChart = new Chart(document.getElementById("endpointChart"), {
+	    type: "bar",
+	    data: {
+	      labels: Object.keys(endpoints),
+	      datasets: [{
+	        label: "API Calls",
+	        data: Object.values(endpoints),
+	        backgroundColor: "#9b59b6"
+	      }]
+	    },
+	    options: {
+	      indexAxis: "y",
+	      plugins: {
+	        title: {
+	          display: true,
+	          text: `Top Endpoints (last ${errors.minutes} min)`
+	        }
+	      }
+	    }
+	  });
+    }
+
+    fetchData();
+    setInterval(fetchData, 5000); // auto-refresh every 5s
+  </script>
+</body>
+</html>
