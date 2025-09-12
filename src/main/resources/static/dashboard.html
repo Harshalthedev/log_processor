@@ -13,6 +13,20 @@
 	  color: #e0e0e0;
 	}
 	
+	body.light-theme {
+	  background: #f9f9f9;
+	  color: #222;
+	}
+	body.light-theme .chart-container {
+	  background: #fff;
+	  color: #222;
+	}
+	body.light-theme th {
+	  background: #eee;
+	  color: #222;
+	}
+
+	
 	h1 {
 	  text-align: center;
 	  margin: 20px;
@@ -94,6 +108,8 @@
     <h3>📜 Recent Logs</h3>
     
     <div class="controls">
+	  <button id="themeToggle" onclick="toggleTheme()">🌙 Dark</button>
+	  <button onclick="exportCSV()">⬇️ Export Logs (CSV)</button>
       <input type="text" id="searchBox" placeholder="Search logs..." onkeyup="applyFilters()">
       <select id="levelFilter" onchange="applyFilters()">
         <option value="">All Levels</option>
@@ -117,7 +133,24 @@
     </table>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
 	<script>
+		
+		let stompClient = null;
+		
+		function connectWebSocket() {
+		  const socket = new SockJS('/ws');
+		  stompClient = Stomp.over(socket);
+		  stompClient.connect({}, () => {
+		    stompClient.subscribe('/topic/logs', (message) => {
+		      const log = JSON.parse(message.body);
+		      allLogs.push(log);
+		      applyFilters();
+		    });
+		  });
+		}
+		connectWebSocket();
 	  let errorChart, latencyChart, endpointChart;
 	
 	  async function fetchData() {
@@ -132,6 +165,30 @@
 	    renderCharts(errors, latency, endpoints);
 	    renderLogs(logs);
 	  }
+	  
+	  function exportCSV() {
+	    const rows = [
+	      ["Time", "Level", "Endpoint", "Latency", "Message"],
+	      ...allLogs.map(log => [log.timestamp, log.level, log.endpoint, log.latency, log.message])
+	    ];
+	    
+	    let csvContent = "data:text/csv;charset=utf-8," 
+	      + rows.map(e => e.join(",")).join("\n");
+	  
+	    const link = document.createElement("a");
+	    link.setAttribute("href", encodeURI(csvContent));
+	    link.setAttribute("download", "logs.csv");
+	    document.body.appendChild(link);
+	    link.click();
+	    document.body.removeChild(link);
+	  }
+	  
+	  function toggleTheme() {
+	    document.body.classList.toggle("light-theme");
+	    const btn = document.getElementById("themeToggle");
+	    btn.textContent = document.body.classList.contains("light-theme") ? "☀️ Light" : "🌙 Dark";
+	  }
+
 	
 	  function renderCharts(errors, latency, endpoints) {
 	    // Destroy old charts before re-rendering
